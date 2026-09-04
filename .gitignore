@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+*.sqlite3
+.env
+media/products/*
+media/logos/*
+!media/products/.gitkeep
+!media/logos/.gitkeep
+staticfiles/
+.venv/
+venv/
