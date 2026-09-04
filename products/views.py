@@ -1,4 +1,5 @@
 from io import BytesIO
+import os
 
 from django.http import FileResponse, HttpResponse
 from django.utils import timezone
@@ -135,4 +136,5 @@ class CatalogPdfViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["get"])
     def view(self, request, pk=None):
         obj = self.get_object()
-        return FileResponse(obj.file.open("rb"), content_type="application/pdf")
+        handle = obj.file.open("rb")
+        return FileResponse(handle, content_type="application/pdf", filename=os.path.basename(obj.file.name) or "catalog.pdf")

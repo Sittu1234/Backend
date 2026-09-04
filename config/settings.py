@@ -18,6 +18,10 @@ ALLOWED_HOSTS = [
 ]
 if DEBUG:
     ALLOWED_HOSTS += ["testserver"]
+# Render sets RENDER=true. Always accept *.onrender.com so host 400s stop.
+if os.getenv("RENDER") or os.getenv("RENDER_EXTERNAL_HOSTNAME"):
+    if ".onrender.com" not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(".onrender.com")
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -77,9 +81,18 @@ WSGI_APPLICATION = "config.wsgi.application"
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 if DATABASE_URL:
+    neon_or_ssl = "neon.tech" in DATABASE_URL or "sslmode=" in DATABASE_URL or not DEBUG
+    pooled = "-pooler" in DATABASE_URL
     DATABASES = {
-        "default": dj_database_url.parse(DATABASE_URL, conn_max_age=600)
+        "default": dj_database_url.parse(
+            DATABASE_URL,
+            conn_max_age=0 if pooled else 600,
+            conn_health_checks=True,
+            ssl_require=neon_or_ssl,
+        )
     }
+    if pooled:
+        DATABASES["default"]["DISABLE_SERVER_SIDE_CURSORS"] = True
 else:
     DATABASES = {
         "default": {
@@ -87,6 +100,10 @@ else:
             "NAME": BASE_DIR / "db.sqlite3",
         }
     }
+
+render_host = os.getenv("RENDER_EXTERNAL_HOSTNAME")
+if render_host and render_host not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append(render_host)
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
@@ -102,13 +119,18 @@ USE_TZ = True
 
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
-STORAGES = {
-    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
-    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedStaticFilesStorage"},
-}
-
 MEDIA_URL = os.getenv("MEDIA_URL", "/media/")
 MEDIA_ROOT = BASE_DIR / "media"
+
+from core.storage import cloudinary_configured  # noqa: E402
+
+STORAGES = {
+    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedStaticFilesStorage"},
+}
+if cloudinary_configured():
+    STORAGES["default"] = {"BACKEND": "core.storage.CloudinaryMediaStorage"}
+else:
+    STORAGES["default"] = {"BACKEND": "django.core.files.storage.FileSystemStorage"}
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
