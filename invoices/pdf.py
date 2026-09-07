@@ -1,5 +1,6 @@
 from io import BytesIO
 from pathlib import Path
+from urllib.request import urlopen
 
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT, TA_JUSTIFY
@@ -115,17 +116,51 @@ def _styles():
     }
 
 
+ASSETS_DIR = Path(__file__).resolve().parent / "assets"
+
+
+def _rl_image(source, w, h):
+    try:
+        if isinstance(source, (bytes, bytearray)):
+            return Image(BytesIO(source), width=w, height=h, lazy=0)
+        return Image(str(source), width=w, height=h, lazy=0)
+    except Exception:
+        return ""
+
+
 def _logo(name: str, w, h):
     candidates = [
+        ASSETS_DIR / name,
         Path(dj_settings.MEDIA_ROOT) / "logos" / name,
         Path(dj_settings.BASE_DIR).parent / "frontend" / "public" / name,
     ]
     for p in candidates:
-        if p.exists():
-            try:
-                return Image(str(p), width=w, height=h)
-            except Exception:
-                continue
+        if p.is_file():
+            img = _rl_image(p, w, h)
+            if img:
+                return img
+    return ""
+
+
+def _company_logo(company, w, h):
+    field = getattr(company, "logo", None)
+    if not field:
+        return ""
+    try:
+        with field.open("rb") as fh:
+            data = fh.read()
+        if data:
+            return _rl_image(data, w, h)
+    except Exception:
+        pass
+    try:
+        url = field.url
+        if url and str(url).startswith("http"):
+            data = urlopen(url, timeout=12).read()
+            if data:
+                return _rl_image(data, w, h)
+    except Exception:
+        pass
     return ""
 
 
@@ -236,8 +271,8 @@ def _numbered_terms(items, s) -> Table:
 
 
 def _header_block(company, s, page2=False):
-    left = _logo("kalpna-header.png", 20 * mm, 20 * mm)
-    right = _logo("kila-header.png", 18 * mm, 18 * mm)
+    left = _logo("kalpna-header.png", 24 * mm, 24 * mm) or _company_logo(company, 24 * mm, 24 * mm)
+    right = _logo("kila-header.png", 22 * mm, 22 * mm)
     addr = ", ".join(filter(None, [company.address, company.city, company.pincode]))
     gst_phone = "  |  ".join(
         filter(
