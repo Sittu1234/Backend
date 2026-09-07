@@ -283,14 +283,15 @@ def _header_block(company, s, page2=False):
             ],
         )
     )
+    brand = (company.company_name or "Kalpna Traders").strip()
     if page2:
         center = [
-            Paragraph("KALPNA TRADERS  ·  Kila Energy Battery Division", s["p2brand"]),
+            Paragraph(brand, s["p2brand"]),
             Paragraph(f"{addr}  |  {gst_phone}", s["meta"]),
         ]
     else:
         center = [
-            Paragraph("Kila Energy Battery Division", s["brand"]),
+            Paragraph(brand, s["brand"]),
             Paragraph(company.tagline or "Trust · Quality · Growth", s["tag"]),
             Paragraph(addr, s["meta"]),
             Paragraph(gst_phone, s["meta"]),
