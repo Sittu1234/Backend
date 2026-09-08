@@ -82,3 +82,98 @@ class CompanyEvent(models.Model):
 
     def __str__(self):
         return f"{self.date} {self.title}"
+
+
+class PublicPage(models.Model):
+    hero_kicker = models.CharField(
+        max_length=200, blank=True, default="National channel partner · SPARS Electric"
+    )
+    hero_title = models.CharField(max_length=200, blank=True)
+    hero_body = models.TextField(
+        blank=True,
+        default=(
+            "EV scooters, lithium packs and LED batteries — quotations, tax invoices "
+            "and dealer support from one Noida team."
+        ),
+    )
+    cta_primary = models.CharField(max_length=80, blank=True, default="Company calendar")
+    cta_secondary = models.CharField(max_length=80, blank=True, default="Contact HR / office")
+    hero_image = models.CharField(max_length=400, blank=True, default="/home/hero-showroom.jpg")
+
+    about_kicker = models.CharField(max_length=80, blank=True, default="About the company")
+    about_title = models.CharField(
+        max_length=200, blank=True, default="A trading house built on people and products"
+    )
+    about_body = models.TextField(
+        blank=True,
+        default=(
+            "Kalpna Traders is the commercial face of SPARS Electric in North India. "
+            "Dealers get GST-ready quotations, a live price list and a team that shows "
+            "up for launches, birthdays and festivals alike."
+        ),
+    )
+
+    products_kicker = models.CharField(max_length=80, blank=True, default="Product range")
+    products_title = models.CharField(
+        max_length=200, blank=True, default="What we quote every day"
+    )
+    highlight_1_title = models.CharField(max_length=80, blank=True, default="EV Scooter")
+    highlight_1_body = models.TextField(
+        blank=True, default="Models, battery options and RTO-ready quotations from one desk."
+    )
+    highlight_1_image = models.CharField(max_length=400, blank=True, default="/home/ev-scooter.jpg")
+    highlight_2_title = models.CharField(max_length=80, blank=True, default="Lithium packs")
+    highlight_2_body = models.TextField(
+        blank=True, default="Voltage, Ah, BMS and connector as per the signed specification."
+    )
+    highlight_2_image = models.CharField(
+        max_length=400, blank=True, default="/home/lithium-battery.jpg"
+    )
+    highlight_3_title = models.CharField(max_length=80, blank=True, default="LED / inverter")
+    highlight_3_body = models.TextField(
+        blank=True, default="Stock range with HSN, GST and dealer price list support."
+    )
+    highlight_3_image = models.CharField(max_length=400, blank=True, default="/home/led-battery.jpg")
+
+    careers_kicker = models.CharField(max_length=80, blank=True, default="Careers")
+    careers_title = models.CharField(
+        max_length=200, blank=True, default="Build your career with Kalpna Traders"
+    )
+    careers_body = models.TextField(
+        blank=True,
+        default=(
+            "Sales, accounts and warehouse roles at our Noida desk. "
+            "Apply with a short note — we reply from HR."
+        ),
+    )
+    careers_email = models.EmailField(blank=True, default="hrbp@kalpanatraders.com")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Public page"
+
+    def __str__(self):
+        return "Public page"
+
+    @classmethod
+    def get_solo(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+
+class CareerOpening(models.Model):
+    title = models.CharField(max_length=200)
+    department = models.CharField(max_length=80, blank=True)
+    location = models.CharField(max_length=120, blank=True, default="Noida")
+    employment_type = models.CharField(max_length=40, blank=True, default="Full-time")
+    description = models.TextField(blank=True)
+    apply_email = models.EmailField(blank=True)
+    is_active = models.BooleanField(default=True)
+    sort_order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["sort_order", "-created_at", "id"]
+
+    def __str__(self):
+        return self.title

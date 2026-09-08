@@ -13,8 +13,14 @@ from rest_framework.views import APIView
 
 from accounts.permissions import IsAdmin
 from activity.utils import log_activity
-from .models import CompanyEvent, CompanySettings
-from .serializers import CompanyEventSerializer, CompanySettingsSerializer, PublicCompanySerializer
+from .models import CareerOpening, CompanyEvent, CompanySettings, PublicPage
+from .serializers import (
+    CareerOpeningSerializer,
+    CompanyEventSerializer,
+    CompanySettingsSerializer,
+    PublicCompanySerializer,
+    PublicPageSerializer,
+)
 from company.terms import PI_KIND_LABELS, PI_KINDS, terms_text_for_kind
 
 
@@ -39,8 +45,63 @@ class CompanySettingsView(APIView):
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def public_profile(request):
-    obj = CompanySettings.get_solo()
-    return Response(PublicCompanySerializer(obj).data)
+    company = CompanySettings.get_solo()
+    page = PublicPage.get_solo()
+    jobs = CareerOpening.objects.filter(is_active=True)
+    data = dict(PublicCompanySerializer(company).data)
+    data["page"] = PublicPageSerializer(page).data
+    data["careers"] = CareerOpeningSerializer(jobs, many=True).data
+    return Response(data)
+
+
+class PublicPageView(APIView):
+    permission_classes = [IsAdmin]
+
+    def get(self, request):
+        obj = PublicPage.get_solo()
+        return Response(PublicPageSerializer(obj).data)
+
+    def put(self, request):
+        obj = PublicPage.get_solo()
+        serializer = PublicPageSerializer(obj, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        log_activity(request.user, "update", "PublicPage", obj.id, "Updated public page")
+        return Response(serializer.data)
+
+
+class CareerOpeningViewSet(viewsets.ModelViewSet):
+    serializer_class = CareerOpeningSerializer
+    pagination_class = None
+    search_fields = ["title", "department", "location", "description"]
+    ordering_fields = ["sort_order", "created_at"]
+
+    def get_permissions(self):
+        if self.action in ("list", "retrieve"):
+            return [AllowAny()]
+        return [IsAdmin()]
+
+    def get_queryset(self):
+        qs = CareerOpening.objects.all()
+        user = self.request.user
+        is_admin = bool(user and user.is_authenticated and getattr(user, "is_admin", False))
+        if not is_admin:
+            qs = qs.filter(is_active=True)
+        return qs
+
+    def perform_create(self, serializer):
+        obj = serializer.save()
+        log_activity(self.request.user, "create", "CareerOpening", obj.id, f"Added job {obj.title}")
+
+    def perform_update(self, serializer):
+        obj = serializer.save()
+        log_activity(self.request.user, "update", "CareerOpening", obj.id, f"Updated job {obj.title}")
+
+    def perform_destroy(self, instance):
+        log_activity(
+            self.request.user, "delete", "CareerOpening", instance.id, f"Deleted job {instance.title}"
+        )
+        instance.delete()
 
 
 class CompanyEventViewSet(viewsets.ModelViewSet):
