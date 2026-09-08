@@ -84,6 +84,10 @@ class ProformaInvoiceViewSet(viewsets.ModelViewSet):
         company = CompanySettings.get_solo()
         return Response({"pi_number": ProformaInvoice.next_pi_number(company.pi_prefix or "PI")})
 
+    @action(detail=False, methods=["get"])
+    def next_tax_number(self, request):
+        return Response({"tax_invoice_number": ProformaInvoice.next_tax_invoice_number()})
+
     @action(detail=True, methods=["get"])
     def pdf(self, request, pk=None):
         invoice = self.get_object()
@@ -109,8 +113,18 @@ class ProformaInvoiceViewSet(viewsets.ModelViewSet):
             raise PermissionDenied("Only admin or sales can convert to tax invoice.")
         if user.is_sales and invoice.created_by_id not in (None, user.id) and invoice.customer.assigned_to_id != user.id:
             raise PermissionDenied("You can only convert your own PIs.")
+        number = (request.data.get("tax_invoice_number") or "").strip()
+        raw_date = request.data.get("tax_invoice_date")
+        invoice_date = None
+        if raw_date:
+            from datetime import datetime
+
+            try:
+                invoice_date = datetime.strptime(str(raw_date)[:10], "%Y-%m-%d").date()
+            except ValueError:
+                return Response({"detail": "Invalid tax invoice date."}, status=400)
         try:
-            invoice = convert_pi_to_tax_invoice(invoice)
+            invoice = convert_pi_to_tax_invoice(invoice, number=number or None, invoice_date=invoice_date)
         except Exception as exc:
             from django.core.exceptions import ValidationError as DjangoValidationError
 

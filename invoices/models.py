@@ -56,7 +56,7 @@ class ProformaInvoice(models.Model):
     last_sent_at = models.DateTimeField(null=True, blank=True)
     last_sent_via = models.CharField(max_length=20, blank=True)
     last_sent_to = models.CharField(max_length=200, blank=True)
-    tax_invoice_number = models.CharField(max_length=30, unique=True, null=True, blank=True)
+    tax_invoice_number = models.CharField(max_length=60, unique=True, null=True, blank=True)
     tax_invoice_date = models.DateField(null=True, blank=True)
     converted_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -114,18 +114,31 @@ class ProformaInvoice(models.Model):
             return False
         return len(self.items.all()) > 0
 
-    def convert_to_tax_invoice(self):
+    def convert_to_tax_invoice(self, number=None, invoice_date=None):
         from django.core.exceptions import ValidationError
 
-        if self.tax_invoice_number:
-            return self
-        if self.status in (self.Status.CANCELLED, self.Status.EXPIRED):
+        if self.status in (self.Status.CANCELLED, self.Status.EXPIRED) and not self.tax_invoice_number:
             raise ValidationError("Cancelled or expired PI cannot be converted.")
-        if len(self.items.all()) == 0:
+        if not self.tax_invoice_number and len(self.items.all()) == 0:
             raise ValidationError("Add products before converting to tax invoice.")
-        self.tax_invoice_number = self.next_tax_invoice_number()
-        self.tax_invoice_date = timezone.now().date()
-        self.converted_at = timezone.now()
+        custom = (number or "").strip()
+        if custom:
+            clash = (
+                ProformaInvoice.objects.filter(tax_invoice_number__iexact=custom)
+                .exclude(pk=self.pk)
+                .exists()
+            )
+            if clash:
+                raise ValidationError("This tax invoice number is already used.")
+            self.tax_invoice_number = custom
+        elif not self.tax_invoice_number:
+            self.tax_invoice_number = self.next_tax_invoice_number()
+        if invoice_date:
+            self.tax_invoice_date = invoice_date
+        elif not self.tax_invoice_date:
+            self.tax_invoice_date = timezone.now().date()
+        if not self.converted_at:
+            self.converted_at = timezone.now()
         self.status = self.Status.INVOICED
         self.save(
             update_fields=[

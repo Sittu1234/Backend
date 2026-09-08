@@ -108,10 +108,19 @@ class ProformaInvoiceSerializer(serializers.ModelSerializer):
             "last_sent_at",
             "last_sent_via",
             "last_sent_to",
-            "tax_invoice_number",
-            "tax_invoice_date",
             "converted_at",
         )
+
+    def validate_tax_invoice_number(self, value):
+        value = (value or "").strip()
+        if not value:
+            return None
+        qs = ProformaInvoice.objects.filter(tax_invoice_number__iexact=value)
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError("This tax invoice number is already used.")
+        return value
 
     def get_can_convert_tax(self, obj):
         return obj.can_convert_to_tax()
@@ -154,9 +163,18 @@ class ProformaInvoiceSerializer(serializers.ModelSerializer):
         return invoice
 
     def update(self, instance, validated_data):
+        from django.utils import timezone
+
         items_data = validated_data.pop("items_data", None)
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
+        if instance.tax_invoice_number:
+            if not instance.tax_invoice_date:
+                instance.tax_invoice_date = timezone.now().date()
+            if not instance.converted_at:
+                instance.converted_at = timezone.now()
+            if instance.status not in (instance.Status.CANCELLED, instance.Status.EXPIRED):
+                instance.status = instance.Status.INVOICED
         instance.save()
         if items_data is not None:
             self._upsert_items(instance, items_data)
