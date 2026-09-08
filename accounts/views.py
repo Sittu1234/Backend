@@ -46,7 +46,10 @@ def login_view(request):
             labels = {"admin": "Admin", "sales": "Sales", "accountant": "Accountant"}
             return Response(
                 {
-                    "detail": f"Yeh account {labels.get(actual, actual)} ka hai. Login dropdown se {labels.get(actual, actual)} select karo."
+                    "detail": (
+                        f"This account is {labels.get(actual, actual)}. "
+                        f"Select {labels.get(actual, actual)} from the login dropdown."
+                    )
                 },
                 status=400,
             )
