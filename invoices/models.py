@@ -9,6 +9,7 @@ class ProformaInvoice(models.Model):
         DRAFT = "draft", "Draft"
         SENT = "sent", "Sent"
         ACCEPTED = "accepted", "Accepted"
+        INVOICED = "invoiced", "Tax Invoice"
         EXPIRED = "expired", "Expired"
         CANCELLED = "cancelled", "Cancelled"
 
@@ -55,6 +56,9 @@ class ProformaInvoice(models.Model):
     last_sent_at = models.DateTimeField(null=True, blank=True)
     last_sent_via = models.CharField(max_length=20, blank=True)
     last_sent_to = models.CharField(max_length=200, blank=True)
+    tax_invoice_number = models.CharField(max_length=30, unique=True, null=True, blank=True)
+    tax_invoice_date = models.DateField(null=True, blank=True)
+    converted_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -80,6 +84,59 @@ class ProformaInvoice(models.Model):
             except ValueError:
                 seq = 1
         return f"{prefix}-{year}-{seq:04d}"
+
+    @staticmethod
+    def next_tax_invoice_number(prefix="INV", start_seq=4):
+        """Tax invoices start at 0004 (001–003 reserved / PI series)."""
+        year = timezone.now().year
+        start = f"{prefix}-{year}-"
+        last = (
+            ProformaInvoice.objects.filter(tax_invoice_number__startswith=start)
+            .order_by("-tax_invoice_number")
+            .first()
+        )
+        seq = start_seq
+        if last and last.tax_invoice_number:
+            try:
+                seq = max(start_seq, int(last.tax_invoice_number.split("-")[-1]) + 1)
+            except ValueError:
+                seq = start_seq
+        return f"{prefix}-{year}-{seq:04d}"
+
+    @property
+    def is_tax_invoice(self):
+        return bool(self.tax_invoice_number)
+
+    def can_convert_to_tax(self):
+        if self.tax_invoice_number:
+            return False
+        if self.status in (self.Status.CANCELLED, self.Status.EXPIRED):
+            return False
+        return len(self.items.all()) > 0
+
+    def convert_to_tax_invoice(self):
+        from django.core.exceptions import ValidationError
+
+        if self.tax_invoice_number:
+            return self
+        if self.status in (self.Status.CANCELLED, self.Status.EXPIRED):
+            raise ValidationError("Cancelled or expired PI cannot be converted.")
+        if len(self.items.all()) == 0:
+            raise ValidationError("Add products before converting to tax invoice.")
+        self.tax_invoice_number = self.next_tax_invoice_number()
+        self.tax_invoice_date = timezone.now().date()
+        self.converted_at = timezone.now()
+        self.status = self.Status.INVOICED
+        self.save(
+            update_fields=[
+                "tax_invoice_number",
+                "tax_invoice_date",
+                "converted_at",
+                "status",
+                "updated_at",
+            ]
+        )
+        return self
 
     def recalculate(self):
         from company.models import CompanySettings

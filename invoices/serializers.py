@@ -51,6 +51,7 @@ class ProformaInvoiceSerializer(serializers.ModelSerializer):
     created_by_employee_id = serializers.CharField(source="created_by.employee_id", read_only=True)
     dispatches = InvoiceDispatchSerializer(many=True, read_only=True)
     items_data = InvoiceItemWriteSerializer(many=True, write_only=True, required=False)
+    can_convert_tax = serializers.SerializerMethodField()
 
     class Meta:
         model = ProformaInvoice
@@ -83,9 +84,13 @@ class ProformaInvoiceSerializer(serializers.ModelSerializer):
             "last_sent_at",
             "last_sent_via",
             "last_sent_to",
+            "tax_invoice_number",
+            "tax_invoice_date",
+            "converted_at",
             "dispatches",
             "items",
             "items_data",
+            "can_convert_tax",
         )
         read_only_fields = (
             "id",
@@ -103,7 +108,13 @@ class ProformaInvoiceSerializer(serializers.ModelSerializer):
             "last_sent_at",
             "last_sent_via",
             "last_sent_to",
+            "tax_invoice_number",
+            "tax_invoice_date",
+            "converted_at",
         )
+
+    def get_can_convert_tax(self, obj):
+        return obj.can_convert_to_tax()
 
     def _upsert_items(self, invoice, items_data):
         invoice.items.all().delete()

@@ -16,6 +16,7 @@ from rest_framework.exceptions import PermissionDenied, ValidationError
 from .models import ProformaInvoice
 from .pdf import build_pi_pdf
 from .serializers import ProformaInvoiceSerializer
+from .services import convert_pi_to_tax_invoice
 
 
 def _render_template(tpl: str, invoice) -> str:
@@ -41,7 +42,7 @@ class ProformaInvoiceViewSet(viewsets.ModelViewSet):
     )
     serializer_class = ProformaInvoiceSerializer
     permission_classes = [CanManageInvoices]
-    search_fields = ["pi_number", "customer__customer_name", "customer__company_name", "customer__mobile"]
+    search_fields = ["pi_number", "tax_invoice_number", "customer__customer_name", "customer__company_name", "customer__mobile"]
     filterset_fields = ["status", "customer", "pi_date", "created_by"]
     ordering_fields = ["pi_date", "grand_total", "pi_number", "created_at"]
 
@@ -86,11 +87,45 @@ class ProformaInvoiceViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["get"])
     def pdf(self, request, pk=None):
         invoice = self.get_object()
-        data = build_pi_pdf(invoice)
+        as_tax = request.query_params.get("kind") == "tax"
+        if as_tax:
+            if not invoice.tax_invoice_number:
+                return Response({"detail": "Convert this PI to tax invoice first."}, status=400)
+            data = build_pi_pdf(invoice, as_tax_invoice=True)
+            filename = f"{invoice.tax_invoice_number}.pdf"
+        else:
+            data = build_pi_pdf(invoice)
+            filename = f"{invoice.pi_number}.pdf"
         response = HttpResponse(data, content_type="application/pdf")
         disposition = "inline" if request.query_params.get("inline") else "attachment"
-        response["Content-Disposition"] = f'{disposition}; filename="{invoice.pi_number}.pdf"'
+        response["Content-Disposition"] = f'{disposition}; filename="{filename}"'
         return response
+
+    @action(detail=True, methods=["post"])
+    def convert_tax(self, request, pk=None):
+        invoice = self.get_object()
+        user = request.user
+        if not (user.is_admin or user.is_sales):
+            raise PermissionDenied("Only admin or sales can convert to tax invoice.")
+        if user.is_sales and invoice.created_by_id not in (None, user.id) and invoice.customer.assigned_to_id != user.id:
+            raise PermissionDenied("You can only convert your own PIs.")
+        try:
+            invoice = convert_pi_to_tax_invoice(invoice)
+        except Exception as exc:
+            from django.core.exceptions import ValidationError as DjangoValidationError
+
+            if isinstance(exc, DjangoValidationError):
+                msg = " ".join(exc.messages) if hasattr(exc, "messages") else str(exc)
+                return Response({"detail": msg}, status=400)
+            raise
+        log_activity(
+            request.user,
+            "update",
+            "ProformaInvoice",
+            invoice.id,
+            f"Converted {invoice.pi_number} to tax invoice {invoice.tax_invoice_number}",
+        )
+        return Response(ProformaInvoiceSerializer(invoice, context={"request": request}).data)
 
     @action(detail=True, methods=["post"])
     def email(self, request, pk=None):

@@ -316,11 +316,13 @@ def _header_block(company, s, page2=False):
 
 
 class NumberedCanvas(pdfcanvas.Canvas):
-    def __init__(self, *args, quote_no="", quote_date="", **kwargs):
+    def __init__(self, *args, quote_no="", quote_date="", no_label="Quotation No.", date_label="Quotation Date", **kwargs):
         pdfcanvas.Canvas.__init__(self, *args, **kwargs)
         self._saved = []
         self.quote_no = quote_no
         self.quote_date = quote_date
+        self.no_label = no_label
+        self.date_label = date_label
 
     def showPage(self):
         self._saved.append(dict(self.__dict__))
@@ -333,19 +335,28 @@ class NumberedCanvas(pdfcanvas.Canvas):
             self.setFillColor(MUTED)
             self.setFont("Helvetica", 7)
             y = 8 * mm
-            self.drawString(ML, y, f"Quotation No. {self.quote_no}")
-            self.drawCentredString(PAGE_W / 2, y, f"Quotation Date {self.quote_date}")
+            self.drawString(ML, y, f"{self.no_label} {self.quote_no}")
+            self.drawCentredString(PAGE_W / 2, y, f"{self.date_label} {self.quote_date}")
             self.drawRightString(PAGE_W - MR, y, f"Page {self._pageNumber} of {total}")
             pdfcanvas.Canvas.showPage(self)
         pdfcanvas.Canvas.save(self)
 
 
-def build_pi_pdf(invoice) -> bytes:
+def build_pi_pdf(invoice, as_tax_invoice=False) -> bytes:
     company = CompanySettings.get_solo()
     s = _styles()
     items = list(invoice.items.all())
     cust = invoice.customer
-    qdate = invoice.pi_date.strftime("%d-%m-%Y")
+    is_tax = bool(as_tax_invoice)
+    doc_date_obj = invoice.tax_invoice_date if is_tax and invoice.tax_invoice_date else invoice.pi_date
+    qdate = doc_date_obj.strftime("%d-%m-%Y")
+    doc_no = invoice.tax_invoice_number if is_tax and invoice.tax_invoice_number else invoice.pi_number
+    bar_title = "Tax Invoice" if is_tax else "Quotation"
+    for_label = "Invoice for" if is_tax else "Quotation for"
+    date_label = "Invoice Date :" if is_tax else "Quotation Date :"
+    no_label = "Tax Invoice No. :" if is_tax else "Quotation No. :"
+    foot_no = "Tax Invoice No." if is_tax else "Quotation No."
+    foot_date = "Invoice Date" if is_tax else "Quotation Date"
     cust_id = f"CU{cust.id:08d}"
     cart_id = f"CT{invoice.id}"
     ship_from = "Noida (Sector-63A)"
@@ -360,11 +371,11 @@ def build_pi_pdf(invoice) -> bytes:
 
     # Page 1
     story = [_header_block(company, s, page2=False), Spacer(1, 2)]
-    story.append(_navy_bar("Quotation", s))
+    story.append(_navy_bar(bar_title, s))
     kind_label = PI_KIND_LABELS.get(getattr(invoice, "pi_kind", "") or "", "")
     if kind_label:
         story.append(Spacer(1, 2))
-        story.append(Paragraph(f"<b>Quotation for :</b>  {kind_label}", s["words"]))
+        story.append(Paragraph(f"<b>{for_label} :</b>  {kind_label}", s["words"]))
     story.append(Spacer(1, 3))
 
     left_meta = _kv(
@@ -377,13 +388,17 @@ def build_pi_pdf(invoice) -> bytes:
         48 * mm,
         half - 48 * mm,
     )
+    right_pairs = [
+        (date_label, qdate),
+        (no_label, doc_no),
+    ]
+    if is_tax:
+        right_pairs.append(("Against PI :", invoice.pi_number))
+    else:
+        right_pairs.append(("Cart Id :", cart_id))
+    right_pairs.append(("Payment Terms :", pay))
     right_meta = _kv(
-        [
-            ("Quotation Date :", qdate),
-            ("Quotation No. :", invoice.pi_number),
-            ("Cart Id :", cart_id),
-            ("Payment Terms :", pay),
-        ],
+        right_pairs,
         s,
         38 * mm,
         half - 38 * mm,
@@ -723,7 +738,7 @@ def build_pi_pdf(invoice) -> bytes:
         rightMargin=MR,
         topMargin=MT,
         bottomMargin=MB,
-        title=f"Quotation {invoice.pi_number}",
+        title=f"{bar_title} {doc_no}",
         author=company.company_name,
     )
     frame = Frame(ML, MB, CONTENT_W, PAGE_H - MT - MB, id="normal", showBoundary=0)
@@ -735,7 +750,14 @@ def build_pi_pdf(invoice) -> bytes:
     )
 
     def _canvas_factory(filename, **kwargs):
-        return NumberedCanvas(filename, quote_no=invoice.pi_number, quote_date=qdate, **kwargs)
+        return NumberedCanvas(
+            filename,
+            quote_no=doc_no,
+            quote_date=qdate,
+            no_label=foot_no,
+            date_label=foot_date,
+            **kwargs,
+        )
 
     doc.build(story, canvasmaker=_canvas_factory)
     return buffer.getvalue()
