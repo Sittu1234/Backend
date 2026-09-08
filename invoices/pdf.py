@@ -702,7 +702,7 @@ def build_pi_pdf(invoice, as_tax_invoice=False) -> bytes:
     story.append(Spacer(1, 8))
     terms_body = (invoice.terms or "").strip() or terms_text_for_kind(getattr(invoice, "pi_kind", "") or "battery")
     sections, footer_lines = parse_terms_text(terms_body)
-    contact = f"Contact: {company.email or 'kilaenergy@gmail.com'} | {company.phone or '9289975452'}"
+    contact = f"Contact: {company.email or 'hrbp@kalpanatraders.com'} | {company.phone or '9289975453'}"
     footer_lines = list(footer_lines) + [contact]
     for title, items in sections:
         story.append(_section_title(title.replace("&", "&amp;"), s))
