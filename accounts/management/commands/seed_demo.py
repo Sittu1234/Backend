@@ -86,6 +86,11 @@ class Command(BaseCommand):
         )
         settings.save()
 
+        from company.calendar_data import seed_calendar_events
+        from company.models import CompanyEvent
+
+        seed_calendar_events(CompanyEvent)
+
         from products.catalog import sync_today_price_list
 
         cats = {}

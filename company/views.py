@@ -3,17 +3,18 @@ from io import StringIO
 
 from django.core.management import call_command
 from django.http import HttpResponse
+from django.utils import timezone
+from rest_framework import viewsets
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from rest_framework.permissions import IsAuthenticated
-
 from accounts.permissions import IsAdmin
 from activity.utils import log_activity
-from .models import CompanySettings
-from .serializers import CompanySettingsSerializer
+from .models import CompanyEvent, CompanySettings
+from .serializers import CompanyEventSerializer, CompanySettingsSerializer, PublicCompanySerializer
 from company.terms import PI_KIND_LABELS, PI_KINDS, terms_text_for_kind
 
 
@@ -33,6 +34,52 @@ class CompanySettingsView(APIView):
         serializer.save()
         log_activity(request.user, "update", "CompanySettings", obj.id, "Updated company settings")
         return Response(serializer.data)
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def public_profile(request):
+    obj = CompanySettings.get_solo()
+    return Response(PublicCompanySerializer(obj).data)
+
+
+class CompanyEventViewSet(viewsets.ModelViewSet):
+    serializer_class = CompanyEventSerializer
+    pagination_class = None
+    filterset_fields = ["kind", "is_public", "is_active"]
+    search_fields = ["title", "description"]
+    ordering_fields = ["date", "created_at"]
+
+    def get_permissions(self):
+        if self.action in ("list", "retrieve"):
+            return [AllowAny()]
+        return [IsAdmin()]
+
+    def get_queryset(self):
+        qs = CompanyEvent.objects.all()
+        user = self.request.user
+        is_admin = bool(user and user.is_authenticated and getattr(user, "is_admin", False))
+        if not is_admin:
+            qs = qs.filter(is_active=True, is_public=True)
+        kind = self.request.query_params.get("kind")
+        if kind:
+            qs = qs.filter(kind=kind)
+        upcoming = self.request.query_params.get("upcoming")
+        if upcoming in ("1", "true", "yes"):
+            qs = qs.filter(date__gte=timezone.localdate())
+        return qs
+
+    def perform_create(self, serializer):
+        obj = serializer.save()
+        log_activity(self.request.user, "create", "CompanyEvent", obj.id, f"Added {obj.title}")
+
+    def perform_update(self, serializer):
+        obj = serializer.save()
+        log_activity(self.request.user, "update", "CompanyEvent", obj.id, f"Updated {obj.title}")
+
+    def perform_destroy(self, instance):
+        log_activity(self.request.user, "delete", "CompanyEvent", instance.id, f"Deleted {instance.title}")
+        instance.delete()
 
 
 @api_view(["GET"])

@@ -66,12 +66,17 @@ class LoginSerializer(serializers.Serializer):
     email = serializers.CharField(required=False, allow_blank=True)
     login = serializers.CharField(required=False, allow_blank=True)
     password = serializers.CharField()
+    role = serializers.CharField(required=False, allow_blank=True)
 
     def validate(self, attrs):
         ident = (attrs.get("login") or attrs.get("email") or "").strip()
         if not ident:
             raise serializers.ValidationError({"email": "Email or Employee ID is required."})
         attrs["ident"] = ident
+        role = (attrs.get("role") or "").strip().lower()
+        if role and role not in ("admin", "sales", "accountant"):
+            raise serializers.ValidationError({"role": "Select Admin, Sales or Accountant."})
+        attrs["role"] = role
         return attrs
 
 

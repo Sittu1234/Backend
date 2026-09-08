@@ -59,3 +59,26 @@ class CompanySettings(models.Model):
     def get_solo(cls):
         obj, _ = cls.objects.get_or_create(pk=1)
         return obj
+
+
+class CompanyEvent(models.Model):
+    class Kind(models.TextChoices):
+        EVENT = "event", "Company Event"
+        BIRTHDAY = "birthday", "Birthday"
+        FESTIVAL = "festival", "Festival"
+        HOLIDAY = "holiday", "Holiday"
+
+    title = models.CharField(max_length=200)
+    kind = models.CharField(max_length=20, choices=Kind.choices, default=Kind.EVENT)
+    date = models.DateField()
+    end_date = models.DateField(null=True, blank=True)
+    description = models.TextField(blank=True)
+    is_public = models.BooleanField(default=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["date", "id"]
+
+    def __str__(self):
+        return f"{self.date} {self.title}"

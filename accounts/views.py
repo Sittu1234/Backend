@@ -39,6 +39,17 @@ def login_view(request):
     user = _find_user(ident)
     if not user or not user.is_active or not user.check_password(password):
         return Response({"detail": "Invalid Employee ID / email or password."}, status=400)
+    wanted = (serializer.validated_data.get("role") or "").strip().lower()
+    if wanted:
+        actual = "admin" if user.is_admin else user.role
+        if actual != wanted:
+            labels = {"admin": "Admin", "sales": "Sales", "accountant": "Accountant"}
+            return Response(
+                {
+                    "detail": f"Yeh account {labels.get(actual, actual)} ka hai. Login dropdown se {labels.get(actual, actual)} select karo."
+                },
+                status=400,
+            )
     user.last_login = timezone.now()
     user.save(update_fields=["last_login"])
     refresh = RefreshToken.for_user(user)
