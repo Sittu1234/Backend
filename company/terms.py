@@ -37,8 +37,6 @@ TERMS_PRODUCT = TERMS_BATTERY
 ADDITIONAL_INFO = [
     "Quotation validity: 7 calendar days from quotation date.",
     "Delivery: 7–15 working days after payment confirmation & spec approval.",
-    "Custom Li-ion / LiFePO4 packs require signed specification sheet.",
-    "BMS, cell grade and warranty as per confirmed product datasheet.",
 ]
 
 PI_KINDS = (
