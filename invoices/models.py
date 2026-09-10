@@ -58,6 +58,7 @@ class ProformaInvoice(models.Model):
     last_sent_to = models.CharField(max_length=200, blank=True)
     tax_invoice_number = models.CharField(max_length=60, unique=True, null=True, blank=True)
     tax_invoice_date = models.DateField(null=True, blank=True)
+    advance_received = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     converted_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -107,6 +108,25 @@ class ProformaInvoice(models.Model):
     def is_tax_invoice(self):
         return bool(self.tax_invoice_number)
 
+    @property
+    def balance_due(self):
+        remaining = Decimal(self.grand_total or 0) - Decimal(self.advance_received or 0)
+        if remaining < 0:
+            remaining = Decimal("0")
+        return remaining.quantize(Decimal("0.01"))
+
+    def apply_advance_received(self, amount):
+        from django.core.exceptions import ValidationError
+
+        value = Decimal(str(amount if amount is not None else 0)).quantize(Decimal("0.01"))
+        if value < 0:
+            raise ValidationError("Advance cannot be negative.")
+        total = Decimal(self.grand_total or 0)
+        if value > total:
+            raise ValidationError("Advance cannot be more than the invoice amount.")
+        self.advance_received = value
+        return value
+
     def can_convert_to_tax(self):
         if self.tax_invoice_number:
             return False
@@ -114,7 +134,7 @@ class ProformaInvoice(models.Model):
             return False
         return len(self.items.all()) > 0
 
-    def convert_to_tax_invoice(self, number=None, invoice_date=None):
+    def convert_to_tax_invoice(self, number=None, invoice_date=None, advance_received=None):
         from django.core.exceptions import ValidationError
 
         if self.status in (self.Status.CANCELLED, self.Status.EXPIRED) and not self.tax_invoice_number:
@@ -137,6 +157,8 @@ class ProformaInvoice(models.Model):
             self.tax_invoice_date = invoice_date
         elif not self.tax_invoice_date:
             self.tax_invoice_date = timezone.now().date()
+        if advance_received is not None:
+            self.apply_advance_received(advance_received)
         if not self.converted_at:
             self.converted_at = timezone.now()
         self.status = self.Status.INVOICED
@@ -144,6 +166,7 @@ class ProformaInvoice(models.Model):
             update_fields=[
                 "tax_invoice_number",
                 "tax_invoice_date",
+                "advance_received",
                 "converted_at",
                 "status",
                 "updated_at",

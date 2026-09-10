@@ -52,6 +52,7 @@ class ProformaInvoiceSerializer(serializers.ModelSerializer):
     dispatches = InvoiceDispatchSerializer(many=True, read_only=True)
     items_data = InvoiceItemWriteSerializer(many=True, write_only=True, required=False)
     can_convert_tax = serializers.SerializerMethodField()
+    balance_due = serializers.DecimalField(max_digits=14, decimal_places=2, read_only=True)
 
     class Meta:
         model = ProformaInvoice
@@ -86,6 +87,8 @@ class ProformaInvoiceSerializer(serializers.ModelSerializer):
             "last_sent_to",
             "tax_invoice_number",
             "tax_invoice_date",
+            "advance_received",
+            "balance_due",
             "converted_at",
             "dispatches",
             "items",
@@ -109,7 +112,17 @@ class ProformaInvoiceSerializer(serializers.ModelSerializer):
             "last_sent_via",
             "last_sent_to",
             "converted_at",
+            "balance_due",
         )
+
+    def validate_advance_received(self, value):
+        if value is None:
+            return Decimal("0")
+        if value < 0:
+            raise serializers.ValidationError("Advance cannot be negative.")
+        if self.instance and value > Decimal(self.instance.grand_total or 0):
+            raise serializers.ValidationError("Advance cannot be more than the invoice amount.")
+        return value
 
     def validate_tax_invoice_number(self, value):
         value = (value or "").strip()

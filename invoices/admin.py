@@ -10,7 +10,17 @@ class InvoiceItemInline(admin.TabularInline):
 
 @admin.register(ProformaInvoice)
 class ProformaInvoiceAdmin(admin.ModelAdmin):
-    list_display = ("pi_number", "tax_invoice_number", "customer", "pi_date", "grand_total", "status", "created_by", "last_sent_at")
+    list_display = (
+        "pi_number",
+        "tax_invoice_number",
+        "customer",
+        "pi_date",
+        "grand_total",
+        "advance_received",
+        "status",
+        "created_by",
+        "last_sent_at",
+    )
     inlines = [InvoiceItemInline]
 
 

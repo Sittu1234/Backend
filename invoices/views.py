@@ -123,8 +123,20 @@ class ProformaInvoiceViewSet(viewsets.ModelViewSet):
                 invoice_date = datetime.strptime(str(raw_date)[:10], "%Y-%m-%d").date()
             except ValueError:
                 return Response({"detail": "Invalid tax invoice date."}, status=400)
+        from decimal import Decimal, InvalidOperation
+
+        raw_advance = request.data.get("advance_received", 0)
         try:
-            invoice = convert_pi_to_tax_invoice(invoice, number=number or None, invoice_date=invoice_date)
+            advance_received = Decimal(str(raw_advance if raw_advance not in (None, "") else 0))
+        except (InvalidOperation, TypeError, ValueError):
+            return Response({"detail": "Invalid advance amount."}, status=400)
+        try:
+            invoice = convert_pi_to_tax_invoice(
+                invoice,
+                number=number or None,
+                invoice_date=invoice_date,
+                advance_received=advance_received,
+            )
         except Exception as exc:
             from django.core.exceptions import ValidationError as DjangoValidationError
 

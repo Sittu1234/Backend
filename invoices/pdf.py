@@ -1,3 +1,4 @@
+from decimal import Decimal
 from io import BytesIO
 from pathlib import Path
 from urllib.request import urlopen
@@ -362,7 +363,17 @@ def build_pi_pdf(invoice, as_tax_invoice=False) -> bytes:
     ship_from = "Noida (Sector-63A)"
     courier = "Self Pickup / Transport"
     mode = "By Hand / Courier"
-    pay = "100% Advance before Sales Order"
+    advance = Decimal(getattr(invoice, "advance_received", 0) or 0)
+    balance = invoice.balance_due if is_tax else invoice.grand_total
+    if is_tax:
+        if advance <= 0:
+            pay = "Due as per this invoice"
+        elif Decimal(balance or 0) <= 0:
+            pay = "Paid in Full"
+        else:
+            pay = "Advance received, balance due"
+    else:
+        pay = "100% Advance before Sales Order"
     gst_rates = [float(i.gst or 0) for i in items]
     common_gst = gst_rates[0] if gst_rates and len(set(gst_rates)) == 1 else None
     gst_label = f"GST Amount ({common_gst:g}%)" if common_gst is not None else "GST Amount"
@@ -535,20 +546,32 @@ def build_pi_pdf(invoice, as_tax_invoice=False) -> bytes:
         Paragraph(f"Mode of Shipment : {mode}", s["small"]),
         Paragraph(f"Shipment Courier : {courier}", s["small"]),
     ]
+    total_label = "Invoice Amount" if is_tax else "Total Amount"
     tax_rows = [
         [Paragraph("Taxable Amount", s["val"]), Paragraph(indian_money(invoice.subtotal), s["tdr"])],
         [Paragraph(gst_label, s["val"]), Paragraph(indian_money(invoice.gst_amount), s["tdr"])],
-        [Paragraph("<b>Total Amount</b>", s["lab"]), Paragraph(f"<b>{indian_money(invoice.grand_total)}</b>", s["tdr"])],
+        [Paragraph(f"<b>{total_label}</b>", s["lab"]), Paragraph(f"<b>{indian_money(invoice.grand_total)}</b>", s["tdr"])],
     ]
+    if is_tax:
+        tax_rows.extend(
+            [
+                [Paragraph("Advance Received", s["val"]), Paragraph(indian_money(advance), s["tdr"])],
+                [
+                    Paragraph("<b>Balance Due</b>", s["lab"]),
+                    Paragraph(f"<b>{indian_money(balance)}</b>", s["tdr"]),
+                ],
+            ]
+        )
     tax_t = Table(tax_rows, colWidths=[48 * mm, 36 * mm])
+    last_row = len(tax_rows) - 1
     tax_t.setStyle(
         TableStyle(
             [
-                ("LINEBELOW", (0, 0), (-1, 1), 0.3, BORDER),
+                ("LINEBELOW", (0, 0), (-1, max(0, last_row - 1)), 0.3, BORDER),
                 ("TOPPADDING", (0, 0), (-1, -1), 3),
                 ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
                 ("LEFTPADDING", (0, 0), (-1, -1), 2),
-                ("BACKGROUND", (0, 2), (-1, 2), HEAD_BG),
+                ("BACKGROUND", (0, last_row), (-1, last_row), HEAD_BG),
             ]
         )
     )
