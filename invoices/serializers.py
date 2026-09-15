@@ -68,6 +68,7 @@ class ProformaInvoiceSerializer(serializers.ModelSerializer):
             "status",
             "freight_charges",
             "packing_charges",
+            "discount_percent",
             "discount",
             "notes",
             "terms",
@@ -106,6 +107,7 @@ class ProformaInvoiceSerializer(serializers.ModelSerializer):
             "igst_amount",
             "gst_amount",
             "grand_total",
+            "discount",
             "is_interstate",
             "created_by",
             "created_at",
@@ -124,6 +126,15 @@ class ProformaInvoiceSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Advance cannot be negative.")
         if self.instance and value > Decimal(self.instance.grand_total or 0):
             raise serializers.ValidationError("Advance cannot be more than the invoice amount.")
+        return value
+
+    def validate_discount_percent(self, value):
+        if value is None:
+            return Decimal("0")
+        if value < 0:
+            raise serializers.ValidationError("Discount cannot be negative.")
+        if value > 100:
+            raise serializers.ValidationError("Discount cannot be more than 100%.")
         return value
 
     def validate_tax_invoice_number(self, value):

@@ -218,7 +218,7 @@ class Command(BaseCommand):
                 customer=customers[1],
                 freight_charges=Decimal("500"),
                 packing_charges=Decimal("200"),
-                discount=Decimal("250"),
+                discount_percent=Decimal("5"),
                 notes="Delivery within 7 working days after confirmation.",
                 terms=settings.default_terms,
                 created_by=sales,

@@ -23,6 +23,7 @@ class ProformaInvoice(models.Model):
 
     freight_charges = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     packing_charges = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    discount_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     discount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     class PiKind(models.TextChoices):
         BATTERY = "battery", "Battery"
@@ -185,16 +186,26 @@ class ProformaInvoice(models.Model):
         items = list(self.items.all())
         subtotal = sum((i.amount for i in items), Decimal("0"))
         gst_total = sum((i.gst_amount for i in items), Decimal("0"))
-        extras = (self.freight_charges or 0) + (self.packing_charges or 0)
-        discount = self.discount or 0
+        extras = Decimal(self.freight_charges or 0) + Decimal(self.packing_charges or 0)
+        percent = Decimal(self.discount_percent or 0)
+        if percent < 0:
+            percent = Decimal("0")
+        if percent > 100:
+            percent = Decimal("100")
+        self.discount_percent = percent
+        base = subtotal + extras
+        discount = (base * percent / Decimal("100")).quantize(Decimal("0.01")) if percent else Decimal("0")
+        self.discount = discount
 
-        taxable = subtotal + Decimal(extras) - Decimal(discount)
+        taxable = base - discount
         if taxable < 0:
             taxable = Decimal("0")
 
         extra_gst_rate = Decimal(company.default_gst or 0) / Decimal("100")
         extra_gst = (Decimal(extras) * extra_gst_rate).quantize(Decimal("0.01"))
         gst_total = (gst_total + extra_gst).quantize(Decimal("0.01"))
+        if percent and base > 0:
+            gst_total = (gst_total * (Decimal("100") - percent) / Decimal("100")).quantize(Decimal("0.01"))
 
         if self.is_interstate:
             self.igst_amount = gst_total
@@ -217,6 +228,8 @@ class ProformaInvoice(models.Model):
                 "igst_amount",
                 "gst_amount",
                 "grand_total",
+                "discount",
+                "discount_percent",
                 "is_interstate",
                 "updated_at",
             ]

@@ -577,8 +577,13 @@ def build_pi_pdf(invoice, as_tax_invoice=False) -> bytes:
             [Paragraph("Freight / Packing", s["val"]), Paragraph(indian_money(extras), s["tdr"])]
         )
     if discount > 0:
+        pct = Decimal(getattr(invoice, "discount_percent", 0) or 0)
+        if pct:
+            label = f"Less : Discount ({float(pct):g}%)"
+        else:
+            label = "Less : Discount"
         tax_rows.append(
-            [Paragraph("Less : Discount", s["val"]), Paragraph(f"- {indian_money(discount)}", s["tdr"])]
+            [Paragraph(f"<b>{label}</b>", s["lab"]), Paragraph(f"<b>- {indian_money(discount)}</b>", s["tdr"])]
         )
     tax_rows.append([Paragraph(gst_label, s["val"]), Paragraph(indian_money(invoice.gst_amount), s["tdr"])])
     tax_rows.append(
