@@ -14,6 +14,7 @@ class InvoiceItemSerializer(serializers.ModelSerializer):
             "id",
             "product",
             "product_name",
+            "remark",
             "hsn_code",
             "unit",
             "qty",
@@ -37,6 +38,7 @@ class InvoiceDispatchSerializer(serializers.ModelSerializer):
 class InvoiceItemWriteSerializer(serializers.Serializer):
     product = serializers.IntegerField(required=False, allow_null=True)
     product_name = serializers.CharField(required=False, allow_blank=True)
+    remark = serializers.CharField(required=False, allow_blank=True)
     hsn_code = serializers.CharField(required=False, allow_blank=True)
     unit = serializers.CharField(required=False, allow_blank=True)
     qty = serializers.DecimalField(max_digits=12, decimal_places=3)
@@ -150,6 +152,7 @@ class ProformaInvoiceSerializer(serializers.ModelSerializer):
                 product=product,
                 product_name=row.get("product_name")
                 or (product.product_name if product else "Item"),
+                remark=(row.get("remark") or "").strip(),
                 hsn_code=row.get("hsn_code") or (product.hsn_code if product else ""),
                 unit=row.get("unit") or (product.unit if product else "PCS"),
                 qty=row.get("qty") or Decimal("0"),

@@ -41,6 +41,15 @@ ML, MR, MT, MB = 10 * mm, 10 * mm, 8 * mm, 14 * mm
 CONTENT_W = PAGE_W - ML - MR
 
 
+def _esc(text) -> str:
+    return (
+        str(text or "")
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+    )
+
+
 def _styles():
     return {
         "brand": ParagraphStyle(
@@ -85,6 +94,9 @@ def _styles():
         ),
         "td": ParagraphStyle("ke_td", fontName="Helvetica", fontSize=8, leading=10, alignment=TA_CENTER),
         "tdl": ParagraphStyle("ke_tdl", fontName="Helvetica", fontSize=8, leading=10, alignment=TA_LEFT),
+        "tdnote": ParagraphStyle(
+            "ke_tdnote", fontName="Helvetica-Oblique", fontSize=7, leading=9, alignment=TA_LEFT, textColor=MUTED
+        ),
         "tdr": ParagraphStyle("ke_tdr", fontName="Helvetica", fontSize=8, leading=10, alignment=TA_RIGHT),
         "boxh": ParagraphStyle(
             "ke_boxh", fontName="Helvetica-Bold", fontSize=8.5, leading=11, textColor=NAVY_DARK
@@ -507,11 +519,19 @@ def build_pi_pdf(invoice, as_tax_invoice=False) -> bytes:
             code = item.product.product_code or ""
         qty = item.qty
         qty_s = f"{float(qty):.1f} {item.unit or 'PCS'}"
+        remark = (getattr(item, "remark", "") or "").strip()
+        if remark:
+            desc = [
+                Paragraph(_esc(item.product_name or ""), s["tdl"]),
+                Paragraph(_esc(remark), s["tdnote"]),
+            ]
+        else:
+            desc = Paragraph(_esc(item.product_name or ""), s["tdl"])
         data.append(
             [
                 Paragraph(str(idx), s["td"]),
-                Paragraph(code, s["td"]),
-                Paragraph(item.product_name or "", s["tdl"]),
+                Paragraph(_esc(code), s["td"]),
+                desc,
                 Paragraph(f"{item.hsn_code or '—'} / {float(item.gst or 0):g}%", s["td"]),
                 Paragraph(qty_s, s["td"]),
                 Paragraph(indian_money(item.rate), s["tdr"]),
@@ -525,7 +545,7 @@ def build_pi_pdf(invoice, as_tax_invoice=False) -> bytes:
     item_style = [
         ("GRID", (0, 0), (-1, -1), 0.4, BORDER),
         ("BACKGROUND", (0, 0), (-1, 0), HEAD_BG),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
         ("TOPPADDING", (0, 0), (-1, -1), 5),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
         ("LEFTPADDING", (0, 0), (-1, -1), 3),
@@ -546,12 +566,24 @@ def build_pi_pdf(invoice, as_tax_invoice=False) -> bytes:
         Paragraph(f"Mode of Shipment : {mode}", s["small"]),
         Paragraph(f"Shipment Courier : {courier}", s["small"]),
     ]
+    extras = Decimal(invoice.freight_charges or 0) + Decimal(invoice.packing_charges or 0)
+    discount = Decimal(invoice.discount or 0)
     total_label = "Invoice Amount" if is_tax else "Total Amount"
     tax_rows = [
         [Paragraph("Taxable Amount", s["val"]), Paragraph(indian_money(invoice.subtotal), s["tdr"])],
-        [Paragraph(gst_label, s["val"]), Paragraph(indian_money(invoice.gst_amount), s["tdr"])],
-        [Paragraph(f"<b>{total_label}</b>", s["lab"]), Paragraph(f"<b>{indian_money(invoice.grand_total)}</b>", s["tdr"])],
     ]
+    if extras > 0:
+        tax_rows.append(
+            [Paragraph("Freight / Packing", s["val"]), Paragraph(indian_money(extras), s["tdr"])]
+        )
+    if discount > 0:
+        tax_rows.append(
+            [Paragraph("Less : Discount", s["val"]), Paragraph(f"- {indian_money(discount)}", s["tdr"])]
+        )
+    tax_rows.append([Paragraph(gst_label, s["val"]), Paragraph(indian_money(invoice.gst_amount), s["tdr"])])
+    tax_rows.append(
+        [Paragraph(f"<b>{total_label}</b>", s["lab"]), Paragraph(f"<b>{indian_money(invoice.grand_total)}</b>", s["tdr"])]
+    )
     if is_tax:
         tax_rows.extend(
             [
@@ -599,6 +631,10 @@ def build_pi_pdf(invoice, as_tax_invoice=False) -> bytes:
             s["words"],
         )
     )
+    note_text = (invoice.notes or "").strip()
+    if note_text:
+        story.append(Spacer(1, 2))
+        story.append(Paragraph(f"<b>Note :</b>  {_esc(note_text)}", s["words"]))
     story.append(Spacer(1, 3))
 
     bank_inner = _kv(

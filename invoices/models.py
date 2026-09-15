@@ -270,6 +270,7 @@ class InvoiceItem(models.Model):
         "products.Product", null=True, blank=True, on_delete=models.SET_NULL
     )
     product_name = models.CharField(max_length=200)
+    remark = models.CharField(max_length=200, blank=True)
     hsn_code = models.CharField(max_length=8, blank=True)
     unit = models.CharField(max_length=10, default="PCS")
     qty = models.DecimalField(max_digits=12, decimal_places=3)
