@@ -567,7 +567,11 @@ def build_pi_pdf(invoice, as_tax_invoice=False) -> bytes:
         Paragraph(f"Shipment Courier : {courier}", s["small"]),
     ]
     extras = Decimal(invoice.freight_charges or 0) + Decimal(invoice.packing_charges or 0)
+    pct = Decimal(getattr(invoice, "discount_percent", 0) or 0)
     discount = Decimal(invoice.discount or 0)
+    if pct > 0:
+        base = Decimal(invoice.subtotal or 0) + extras
+        discount = (base * pct / Decimal("100")).quantize(Decimal("0.01"))
     total_label = "Invoice Amount" if is_tax else "Total Amount"
     tax_rows = [
         [Paragraph("Taxable Amount", s["val"]), Paragraph(indian_money(invoice.subtotal), s["tdr"])],
@@ -576,14 +580,16 @@ def build_pi_pdf(invoice, as_tax_invoice=False) -> bytes:
         tax_rows.append(
             [Paragraph("Freight / Packing", s["val"]), Paragraph(indian_money(extras), s["tdr"])]
         )
-    if discount > 0:
-        pct = Decimal(getattr(invoice, "discount_percent", 0) or 0)
-        if pct:
-            label = f"Less : Discount ({float(pct):g}%)"
-        else:
-            label = "Less : Discount"
+    if pct > 0 or discount > 0:
+        pct_label = f"{float(pct):g}%" if pct > 0 else "—"
         tax_rows.append(
-            [Paragraph(f"<b>{label}</b>", s["lab"]), Paragraph(f"<b>- {indian_money(discount)}</b>", s["tdr"])]
+            [Paragraph("Discount %", s["lab"]), Paragraph(f"<b>{pct_label}</b>", s["tdr"])]
+        )
+        tax_rows.append(
+            [
+                Paragraph("<b>Discount Amount</b>", s["lab"]),
+                Paragraph(f"<b>- {indian_money(discount)}</b>", s["tdr"]),
+            ]
         )
     tax_rows.append([Paragraph(gst_label, s["val"]), Paragraph(indian_money(invoice.gst_amount), s["tdr"])])
     tax_rows.append(

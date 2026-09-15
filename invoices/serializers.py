@@ -1,4 +1,4 @@
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from rest_framework import serializers
 
@@ -118,6 +118,20 @@ class ProformaInvoiceSerializer(serializers.ModelSerializer):
             "converted_at",
             "balance_due",
         )
+
+    def to_internal_value(self, data):
+        payload = {key: data.get(key) for key in data}
+        incoming_pct = payload.get("discount_percent", None)
+        if incoming_pct in (None, ""):
+            raw = payload.get("discount")
+            if raw not in (None, ""):
+                try:
+                    val = Decimal(str(raw))
+                    if Decimal("0") <= val <= Decimal("100"):
+                        payload["discount_percent"] = str(val)
+                except (InvalidOperation, TypeError, ValueError):
+                    pass
+        return super().to_internal_value(payload)
 
     def validate_advance_received(self, value):
         if value is None:
