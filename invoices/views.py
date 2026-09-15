@@ -92,6 +92,12 @@ class ProformaInvoiceViewSet(viewsets.ModelViewSet):
     def pdf(self, request, pk=None):
         invoice = self.get_object()
         as_tax = request.query_params.get("kind") == "tax"
+        proposal = request.query_params.get("proposal")
+        if proposal is not None:
+            invoice.include_proposal = str(proposal).strip().lower() in ("1", "true", "yes", "on")
+        note = request.query_params.get("proposal_note")
+        if note is not None:
+            invoice.proposal_note = note
         if as_tax:
             if not invoice.tax_invoice_number:
                 return Response({"detail": "Convert this PI to tax invoice first."}, status=400)
@@ -162,6 +168,11 @@ class ProformaInvoiceViewSet(viewsets.ModelViewSet):
             return Response({"detail": "Customer has no email address."}, status=400)
         body = request.data.get("message") or _render_template(company.email_template, invoice)
         subject = request.data.get("subject") or f"Proforma Invoice {invoice.pi_number} – {company.company_name}"
+        if getattr(invoice, "include_proposal", False):
+            if not request.data.get("subject"):
+                subject = f"Quotation {invoice.pi_number} with Business Proposal – {company.company_name}"
+            if not request.data.get("message"):
+                body = f"{body}\n\nA business proposal is included in the attached PDF."
         mail = EmailMessage(
             subject=subject,
             body=body,
@@ -182,6 +193,8 @@ class ProformaInvoiceViewSet(viewsets.ModelViewSet):
         if mobile and not mobile.startswith("91") and len(mobile) == 10:
             mobile = "91" + mobile
         text = _render_template(company.whatsapp_template, invoice)
+        if getattr(invoice, "include_proposal", False):
+            text = f"{text}\n\nBusiness proposal is included in the quotation PDF."
         link = f"{settings.FRONTEND_URL}/invoices/{invoice.id}"
         pdf_url = f"{request.build_absolute_uri(f'/api/invoices/{invoice.id}/pdf/')}?inline=1"
         full = f"{text}\n\nView: {link}\nPDF: {pdf_url}"

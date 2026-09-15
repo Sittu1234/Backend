@@ -55,6 +55,7 @@ class ProformaInvoiceSerializer(serializers.ModelSerializer):
     items_data = InvoiceItemWriteSerializer(many=True, write_only=True, required=False)
     can_convert_tax = serializers.SerializerMethodField()
     balance_due = serializers.DecimalField(max_digits=14, decimal_places=2, read_only=True)
+    include_proposal = serializers.BooleanField(required=False)
 
     class Meta:
         model = ProformaInvoice
@@ -72,6 +73,8 @@ class ProformaInvoiceSerializer(serializers.ModelSerializer):
             "discount",
             "notes",
             "terms",
+            "include_proposal",
+            "proposal_note",
             "pi_kind",
             "subtotal",
             "cgst_amount",
@@ -118,6 +121,16 @@ class ProformaInvoiceSerializer(serializers.ModelSerializer):
             "converted_at",
             "balance_due",
         )
+
+    def _flag(self, raw, key, default=None):
+        if raw is None or key not in raw:
+            return default
+        val = raw.get(key)
+        if isinstance(val, bool):
+            return val
+        if val in (None, ""):
+            return False
+        return str(val).strip().lower() in ("1", "true", "yes", "on")
 
     def to_internal_value(self, data):
         payload = {key: data.get(key) for key in data}
@@ -207,6 +220,12 @@ class ProformaInvoiceSerializer(serializers.ModelSerializer):
         from django.utils import timezone
 
         items_data = validated_data.pop("items_data", None)
+        raw = getattr(self, "initial_data", None)
+        flag = self._flag(raw, "include_proposal")
+        if flag is not None:
+            validated_data["include_proposal"] = flag
+        if raw is not None and "proposal_note" in raw:
+            validated_data["proposal_note"] = raw.get("proposal_note") or ""
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         if instance.tax_invoice_number:

@@ -26,6 +26,7 @@ from company.models import CompanySettings
 from company.terms import ADDITIONAL_INFO, PI_KIND_LABELS, parse_terms_text, terms_text_for_kind
 from core.utils import amount_in_words, indian_money
 from django.conf import settings as dj_settings
+from invoices.proposal import build_proposal_story
 
 NAVY = colors.HexColor("#163A5F")
 NAVY_DARK = colors.HexColor("#0F2C4A")
@@ -646,6 +647,14 @@ def build_pi_pdf(invoice, as_tax_invoice=False) -> bytes:
     if note_text:
         story.append(Spacer(1, 2))
         story.append(Paragraph(f"<b>Note :</b>  {_esc(note_text)}", s["words"]))
+    if getattr(invoice, "include_proposal", False) and not is_tax:
+        story.append(Spacer(1, 2))
+        story.append(
+            Paragraph(
+                "<b>Business Proposal:</b> included with this quotation — see the Business Proposal page.",
+                s["words"],
+            )
+        )
     story.append(Spacer(1, 3))
 
     bank_inner = _kv(
@@ -763,7 +772,23 @@ def build_pi_pdf(invoice, as_tax_invoice=False) -> bytes:
     )
     story.append(note)
 
-    # Page 2
+    if getattr(invoice, "include_proposal", False) and not is_tax:
+        story.append(NextPageTemplate("page2"))
+        story.append(PageBreak())
+        story.append(_header_block(company, s, page2=True))
+        story.append(Spacer(1, 3))
+        story.extend(
+            build_proposal_story(
+                invoice,
+                company,
+                s,
+                navy_bar=_navy_bar,
+                section_title=_section_title,
+                content_w=CONTENT_W,
+            )
+        )
+
+    # Terms page
     story.append(NextPageTemplate("page2"))
     story.append(PageBreak())
     story.append(_header_block(company, s, page2=True))

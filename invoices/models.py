@@ -32,6 +32,8 @@ class ProformaInvoice(models.Model):
 
     notes = models.TextField(blank=True)
     terms = models.TextField(blank=True)
+    include_proposal = models.BooleanField(default=False)
+    proposal_note = models.TextField(blank=True)
     pi_kind = models.CharField(
         max_length=20,
         choices=PiKind.choices,
