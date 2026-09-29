@@ -40,8 +40,13 @@ def login_view(request):
     ident = serializer.validated_data["ident"]
     password = serializer.validated_data["password"]
     user = _find_user(ident)
-    if not user or not user.is_active or not user.check_password(password):
+    if not user or not user.check_password(password):
         return Response({"detail": "Invalid Employee ID / email or password."}, status=400)
+    if not user.is_active:
+        return Response(
+            {"detail": "This login is disabled. Ask an admin to enable it from Team Manage."},
+            status=400,
+        )
     wanted = (serializer.validated_data.get("role") or "").strip().lower()
     if wanted:
         actual = "admin" if user.is_admin else user.role
@@ -241,6 +246,18 @@ class UserViewSet(viewsets.ModelViewSet):
         log_activity(self.request.user, "create", "User", user.id, f"Created user {user.email}")
 
     def perform_update(self, serializer):
+        turning_off = serializer.validated_data.get("is_active") is False
+        instance = serializer.instance
+        if turning_off and instance.id == self.request.user.id:
+            from rest_framework.exceptions import ValidationError
+
+            raise ValidationError("You cannot disable your own login.")
+        if turning_off and instance.role == User.Role.ADMIN:
+            still_on = User.objects.filter(role=User.Role.ADMIN, is_active=True).exclude(pk=instance.pk).exists()
+            if not still_on:
+                from rest_framework.exceptions import ValidationError
+
+                raise ValidationError("Keep at least one active admin login.")
         user = serializer.save()
         log_activity(self.request.user, "update", "User", user.id, f"Updated user {user.email}")
 
