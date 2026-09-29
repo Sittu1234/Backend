@@ -25,15 +25,42 @@ class UserManager(BaseUserManager):
 
 class User(AbstractBaseUser, PermissionsMixin):
     class Role(models.TextChoices):
-        ADMIN = "admin", "Admin"
+        ADMIN = "admin", "Admin / MD"
         SALES = "sales", "Sales Executive"
         ACCOUNTANT = "accountant", "Accountant"
+        HR = "hr", "HR"
+        MANAGER = "manager", "Manager"
+        TECHNICIAN = "technician", "Technician"
+        DEALER = "dealer", "Dealer Portal"
+
+    STAFF_ROLES = (
+        Role.ADMIN,
+        Role.SALES,
+        Role.ACCOUNTANT,
+        Role.HR,
+        Role.MANAGER,
+        Role.TECHNICIAN,
+    )
 
     name = models.CharField(max_length=150)
     email = models.EmailField(unique=True)
     employee_id = models.CharField(max_length=20, unique=True, null=True, blank=True)
-    role = models.CharField(max_length=20, choices=Role.choices, default=Role.SALES)
+    role = models.CharField(max_length=20, choices=Role.choices, default=Role.SALES, db_index=True)
     mobile = models.CharField(max_length=15, blank=True)
+    manager = models.ForeignKey(
+        "self",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="team_members",
+    )
+    linked_dealer = models.ForeignKey(
+        "customers.Customer",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="portal_users",
+    )
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -71,6 +98,26 @@ class User(AbstractBaseUser, PermissionsMixin):
     @property
     def is_accountant(self):
         return self.role == self.Role.ACCOUNTANT
+
+    @property
+    def is_hr(self):
+        return self.role == self.Role.HR
+
+    @property
+    def is_manager(self):
+        return self.role == self.Role.MANAGER
+
+    @property
+    def is_technician(self):
+        return self.role == self.Role.TECHNICIAN
+
+    @property
+    def is_dealer(self):
+        return self.role == self.Role.DEALER
+
+    @property
+    def is_internal(self):
+        return self.role != self.Role.DEALER
 
 
 class PasswordResetToken(models.Model):

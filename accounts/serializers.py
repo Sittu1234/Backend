@@ -13,6 +13,8 @@ class UserSerializer(serializers.ModelSerializer):
             "employee_id",
             "role",
             "mobile",
+            "manager",
+            "linked_dealer",
             "is_active",
             "last_login",
             "created_at",
@@ -26,7 +28,18 @@ class UserCreateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ("id", "name", "email", "employee_id", "role", "mobile", "password", "is_active")
+        fields = (
+            "id",
+            "name",
+            "email",
+            "employee_id",
+            "role",
+            "mobile",
+            "manager",
+            "linked_dealer",
+            "password",
+            "is_active",
+        )
 
     def validate_employee_id(self, value):
         value = (value or "").strip().upper()
@@ -74,8 +87,9 @@ class LoginSerializer(serializers.Serializer):
             raise serializers.ValidationError({"email": "Email or Employee ID is required."})
         attrs["ident"] = ident
         role = (attrs.get("role") or "").strip().lower()
-        if role and role not in ("admin", "sales", "accountant"):
-            raise serializers.ValidationError({"role": "Select Admin, Sales or Accountant."})
+        allowed = ("admin", "sales", "accountant", "hr", "manager", "technician", "dealer")
+        if role and role not in allowed:
+            raise serializers.ValidationError({"role": "Select a valid login role."})
         attrs["role"] = role
         return attrs
 

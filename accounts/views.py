@@ -43,7 +43,15 @@ def login_view(request):
     if wanted:
         actual = "admin" if user.is_admin else user.role
         if actual != wanted:
-            labels = {"admin": "Admin", "sales": "Sales", "accountant": "Accountant"}
+            labels = {
+                "admin": "Admin",
+                "sales": "Sales",
+                "accountant": "Accountant",
+                "hr": "HR",
+                "manager": "Manager",
+                "technician": "Technician",
+                "dealer": "Dealer Portal",
+            }
             return Response(
                 {
                     "detail": (

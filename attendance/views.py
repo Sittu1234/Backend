@@ -7,7 +7,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from accounts.models import User
-from accounts.permissions import IsAdmin
+from accounts.permissions import IsAdmin, IsInternalUser
 from activity.utils import log_activity
 from .models import Attendance
 from .serializers import AttendanceSerializer
@@ -27,7 +27,7 @@ def _now_time():
 
 class AttendanceViewSet(viewsets.ModelViewSet):
     serializer_class = AttendanceSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsInternalUser]
     filterset_fields = ["user", "date", "status"]
     ordering_fields = ["date", "check_in"]
 
