@@ -89,7 +89,7 @@ def dashboard(request):
     mine = Attendance.objects.filter(user=request.user, date=today).first()
     return Response(
         {
-            "total_invoices": qs.count(),
+            "total_invoices": billed.count(),
             "total_customers": dealers.count(),
             "total_dealers": dealers.count(),
             "total_vendors": vendors.count(),
