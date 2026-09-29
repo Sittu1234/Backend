@@ -1,5 +1,7 @@
 from rest_framework import serializers
 
+from customers.serializers import CustomerSerializer
+
 from .models import (
     Department,
     DocFolder,
