@@ -3,6 +3,7 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.core.mail import send_mail
+from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 from rest_framework import status, viewsets
@@ -12,9 +13,11 @@ from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from activity.utils import log_activity
+from customers.models import Customer
 from .models import PasswordResetToken, User
 from .permissions import IsAdmin
 from .serializers import (
+    DealerRegisterSerializer,
     ForgotPasswordSerializer,
     LoginSerializer,
     ResetPasswordSerializer,
@@ -91,6 +94,75 @@ def logout_view(request):
 @permission_classes([IsAuthenticated])
 def me_view(request):
     return Response(UserSerializer(request.user).data)
+
+
+def _first_error(errors):
+    for value in errors.values():
+        if isinstance(value, list) and value:
+            return str(value[0])
+        if isinstance(value, dict):
+            return _first_error(value)
+        if value:
+            return str(value)
+    return "Could not create the dealer account."
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def dealer_register(request):
+    serializer = DealerRegisterSerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response({"detail": _first_error(serializer.errors)}, status=400)
+    data = serializer.validated_data
+    email = data["email"]
+    address = (data.get("address") or "").strip() or f"{data['city']}, {data['state']}"
+    pincode = (data.get("pincode") or "").strip() or "000000"
+    with transaction.atomic():
+        dealer = (
+            Customer.objects.filter(party_type=Customer.PartyType.DEALER, email__iexact=email)
+            .order_by("id")
+            .first()
+        )
+        if dealer and User.objects.filter(linked_dealer=dealer, role=User.Role.DEALER).exists():
+            return Response(
+                {"detail": "This dealer already has a portal login. Use dealer login."},
+                status=400,
+            )
+        if not dealer:
+            dealer = Customer.objects.create(
+                customer_name=data["name"].strip(),
+                company_name=data["company_name"].strip(),
+                party_type=Customer.PartyType.DEALER,
+                gst_no=data.get("gst_no") or "",
+                contact_person=data["name"].strip(),
+                mobile=data["mobile"],
+                email=email,
+                billing_address=address,
+                state=data["state"].strip(),
+                city=data["city"].strip(),
+                pincode=pincode,
+                notes="Self-registered from the public home page.",
+            )
+        user = User.objects.create_user(
+            email=email,
+            password=data["password"],
+            name=data["name"].strip(),
+            role=User.Role.DEALER,
+            mobile=data["mobile"],
+            linked_dealer=dealer,
+        )
+    user.last_login = timezone.now()
+    user.save(update_fields=["last_login"])
+    log_activity(user, "register", "User", user.id, f"Dealer portal signup for {dealer}", request)
+    refresh = RefreshToken.for_user(user)
+    return Response(
+        {
+            "access": str(refresh.access_token),
+            "refresh": str(refresh),
+            "user": UserSerializer(user).data,
+        },
+        status=201,
+    )
 
 
 @api_view(["POST"])

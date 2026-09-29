@@ -94,6 +94,34 @@ class LoginSerializer(serializers.Serializer):
         return attrs
 
 
+class DealerRegisterSerializer(serializers.Serializer):
+    name = serializers.CharField(max_length=150)
+    company_name = serializers.CharField(max_length=200)
+    email = serializers.EmailField()
+    mobile = serializers.CharField(max_length=15)
+    password = serializers.CharField(min_length=8, write_only=True)
+    city = serializers.CharField(max_length=80)
+    state = serializers.CharField(max_length=80)
+    pincode = serializers.CharField(max_length=10, required=False, allow_blank=True)
+    address = serializers.CharField(required=False, allow_blank=True)
+    gst_no = serializers.CharField(max_length=15, required=False, allow_blank=True)
+
+    def validate_email(self, value):
+        value = value.strip().lower()
+        if User.objects.filter(email__iexact=value).exists():
+            raise serializers.ValidationError("This email is already registered. Use dealer login.")
+        return value
+
+    def validate_mobile(self, value):
+        digits = "".join(ch for ch in value if ch.isdigit())
+        if len(digits) < 10:
+            raise serializers.ValidationError("Enter a valid 10-digit mobile number.")
+        return digits[-10:]
+
+    def validate_gst_no(self, value):
+        return (value or "").strip().upper()
+
+
 class ForgotPasswordSerializer(serializers.Serializer):
     email = serializers.EmailField()
 
