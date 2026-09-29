@@ -2,7 +2,7 @@ from datetime import timedelta
 from decimal import Decimal
 
 from django.db.models import Count, Sum, DecimalField
-from django.db.models.functions import TruncMonth, TruncDay
+from django.db.models.functions import Coalesce, TruncMonth, TruncDay
 from django.utils import timezone
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
@@ -17,6 +17,14 @@ from core.scoping import dealer_queryset, invoice_queryset
 
 def _base_qs(request):
     return invoice_queryset(ProformaInvoice.objects.exclude(status="cancelled"), request.user)
+
+
+def _invoiced_qs(request):
+    """Money on the dashboard is only tax invoices that have been cut, not quotations."""
+    return invoice_queryset(
+        ProformaInvoice.objects.filter(status=ProformaInvoice.Status.INVOICED),
+        request.user,
+    ).annotate(bill_date=Coalesce("tax_invoice_date", "pi_date"))
 
 
 def _tax_totals(qs):
@@ -44,18 +52,19 @@ def dashboard(request):
     now = timezone.now()
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     qs = _base_qs(request)
-    this_month = qs.filter(pi_date__gte=month_start.date())
+    billed = _invoiced_qs(request)
+    this_month = billed.filter(bill_date__gte=month_start.date())
     pending = qs.filter(status__in=["draft", "sent"])
 
     monthly_graph = (
-        qs.filter(pi_date__gte=(now - timedelta(days=365)).date())
-        .annotate(month=TruncMonth("pi_date"))
+        billed.filter(bill_date__gte=(now - timedelta(days=365)).date())
+        .annotate(month=TruncMonth("bill_date"))
         .values("month")
         .annotate(total=Sum("grand_total"), count=Count("id"))
         .order_by("month")
     )
     top_customers = (
-        qs.values("customer_id", "customer__customer_name", "customer__company_name")
+        billed.values("customer_id", "customer__customer_name", "customer__company_name")
         .annotate(total=Sum("grand_total"), count=Count("id"))
         .order_by("-total")[:5]
     )
@@ -142,7 +151,7 @@ def dashboard(request):
 @permission_classes([IsAuthenticated])
 def daily_report(request):
     date = request.query_params.get("date") or timezone.localdate().isoformat()
-    qs = _base_qs(request).filter(pi_date=date)
+    qs = _invoiced_qs(request).filter(bill_date=date)
     customers = qs.values("customer").distinct().count()
     tax = _tax_totals(qs)
     return Response(
@@ -181,9 +190,9 @@ def monthly_report(request):
     now = timezone.now()
     year = int(request.query_params.get("year") or now.year)
     month = int(request.query_params.get("month") or now.month)
-    qs = _base_qs(request).filter(pi_date__year=year, pi_date__month=month)
+    qs = _invoiced_qs(request).filter(bill_date__year=year, bill_date__month=month)
     daily = (
-        qs.annotate(day=TruncDay("pi_date"))
+        qs.annotate(day=TruncDay("bill_date"))
         .values("day")
         .annotate(total=Sum("grand_total"), count=Count("id"))
         .order_by("day")
@@ -231,7 +240,7 @@ def monthly_report(request):
 @permission_classes([IsAuthenticated])
 def customer_report(request):
     qs = (
-        _base_qs(request)
+        _invoiced_qs(request)
         .values("customer_id", "customer__customer_name", "customer__company_name", "customer__mobile")
         .annotate(total=Sum("grand_total"), count=Count("id"))
         .order_by("-total")
@@ -247,7 +256,7 @@ def customer_report(request):
                 "grand_total": float(i.grand_total),
                 "status": i.status,
             }
-            for i in _base_qs(request).filter(customer_id=customer_id).select_related("customer")
+            for i in _invoiced_qs(request).filter(customer_id=customer_id).select_related("customer")
         ]
     return Response(
         {
