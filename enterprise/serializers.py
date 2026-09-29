@@ -1,6 +1,8 @@
+from django.db.models import Q
 from rest_framework import serializers
 
 from customers.serializers import CustomerSerializer
+from invoices.models import ProformaInvoice
 
 from .models import (
     Department,
@@ -264,10 +266,26 @@ class VendorPaymentSerializer(serializers.ModelSerializer):
         read_only_fields = ("id", "payment_number", "created_by", "created_at", "updated_at")
 
 
+class InvoiceNumberOrPkField(serializers.PrimaryKeyRelatedField):
+    def to_internal_value(self, data):
+        if data in (None, ""):
+            return None
+        text = str(data).strip()
+        if text and not text.isdigit():
+            invoice = ProformaInvoice.objects.filter(
+                Q(tax_invoice_number__iexact=text) | Q(pi_number__iexact=text)
+            ).first()
+            if not invoice:
+                self.fail("does_not_exist", pk_value=text)
+            return invoice
+        return super().to_internal_value(data)
+
+
 class PaymentSerializer(serializers.ModelSerializer):
     customer_name = serializers.CharField(source="customer.customer_name", read_only=True)
     invoice_number = serializers.SerializerMethodField()
     received_by_name = serializers.CharField(source="received_by.name", read_only=True)
+    invoice = InvoiceNumberOrPkField(queryset=ProformaInvoice.objects.all(), required=False, allow_null=True)
 
     class Meta:
         model = Payment
